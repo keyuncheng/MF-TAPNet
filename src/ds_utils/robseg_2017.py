@@ -10,6 +10,23 @@ import argparse
 utils for MICCAI 2017 robot instrument segmentation dataset
 """
 
+num_frames_video = 225 # number of frames per video
+original_height, original_width = 1080, 1920 # original img h, w
+cropped_height, cropped_width = 1024, 1280 # cropped img h, w
+h_start, w_start = 28, 320 # crop origin
+
+
+num_videos = {
+    'train': 8,
+    'test': 10,
+}
+
+# self defined train_val split
+folds = {0: [1, 3],
+         1: [2, 5],
+         2: [4, 8],
+         3: [6, 7]}
+
 # number of classes for each type of problem
 problem_class = {
     'binary': 2,
@@ -31,23 +48,12 @@ mask_folder = {
     'instruments': 'instruments_masks'
 }
 
+# for linear interpolation
 mask_folder_linear = {
     'binary': 'binary_masks_linear',
     'parts': 'parts_masks_linear',
     'instruments': 'instruments_masks_linear'
 }
-
-# self defined train_val split
-folds = {0: [1, 3],
-         1: [2, 5],
-         2: [4, 8],
-         3: [6, 7]}
-
-num_frames_video = 225 # number of frames per video
-original_height, original_width = 1080, 1920 # original img h, w
-cropped_height, cropped_width = 1024, 1280 # cropped img h, w
-h_start, w_start = 28, 320 # crop origin
-
 
 
 """
@@ -57,7 +63,7 @@ from specific instrument dataset
 """
 
 
-def get_data(data_dir, data_type, folder_id=-1):
+def get_data(data_dir, data_type, mode='train', folder_id=-1):
     """
     @params:
     data_type: image, optflows or problem type
@@ -66,7 +72,9 @@ def get_data(data_dir, data_type, folder_id=-1):
     a list of data of specific type
     """
 
-    global mask_folder
+    global num_videos, mask_folder
+
+    num_folders = num_videos[mode]
     
     # if it belongs to problem_type, return masks
     if data_type in mask_folder.keys():
@@ -74,18 +82,21 @@ def get_data(data_dir, data_type, folder_id=-1):
     else:
         folder_name = data_type
 
+    filenames = []
+
     if folder_id > 0:
-        # get dataset<folder_id>
-        filenames = (Path(data_dir) / ('instrument_dataset_' + str(folder_id)) \
+        # get instrument_dataset_<folder_id>
+        filenames += (Path(data_dir) / ('instrument_dataset_' + str(folder_id)) \
             / folder_name).glob('*')
     elif folder_id == -1:
         # get all data
-        filenames = []
-        for folder_id in range(1, 9):
+        for folder_id in range(1, num_folders + 1):
             filenames += (Path(data_dir) / ('instrument_dataset_' + str(folder_id)) \
             / folder_name).glob('*')
 
-    assert len(filenames) > 0
+    if len(filenames) <= 0:
+        raise ValueError("Empty folder, data_type: %s, mode: %s, folder_id: %d"
+            % (data_type, mode, folder_id))
     
     # sort by name
     return list(sorted(filenames))
@@ -137,6 +148,14 @@ def trainval_split(data_dir, fold):
 """
 
 def preprocess_data(args):
+    """
+    preprocess data following the instructions
+    * crop image
+    * for each problem type, squeeze the gt to one two-dim grayscale mask scaled to [0, 255]
+
+    @param: argparse args
+    """
+
     # data dir
     data_dir = Path(args.data_dir)
     assert data_dir.exists() == True
@@ -145,13 +164,11 @@ def preprocess_data(args):
     cropped_data_dir = Path(args.cropped_data_dir)
     cropped_data_dir.mkdir(exist_ok=True, parents=True)
 
-    # max number of folders
-    num_folders = 8 if args.mode == 'train' else 10
-
-    global problem_factor, mask_folder
+    global num_videos, problem_factor, mask_folder
     # crop (cropped_height, cropped_width) from (h_start, w_start)
     global cropped_height, cropped_width, h_start, w_start
 
+    num_folders = num_videos[args.mode] # number of folders
 
     for idx in range(1, num_folders + 1):
         # original dataset dir
