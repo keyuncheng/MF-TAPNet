@@ -120,10 +120,10 @@ def get_all_preds(preds_dir, problem_type):
     return filenames
 
 
-
-# set folds[fold] as validation set
-# others as training_set
 def trainval_split(data_dir, fold):
+    """
+    get train/valid filenames
+    """
     global folds
 
     train_file_names = []
@@ -133,6 +133,7 @@ def trainval_split(data_dir, fold):
         # sort according to filename
         filenames = (Path(data_dir) / ('instrument_dataset_' + str(idx)) / 'images').glob('*')
         filenames = list(sorted(filenames))
+        # set folds[fold] as validation set
         if idx in folds[fold]:
             val_file_names += filenames
         else:
@@ -161,8 +162,8 @@ def preprocess_data(args):
     assert data_dir.exists() == True
 
     # cropped data dir
-    cropped_data_dir = Path(args.cropped_data_dir)
-    cropped_data_dir.mkdir(exist_ok=True, parents=True)
+    target_data_dir = Path(args.target_data_dir)
+    target_data_dir.mkdir(exist_ok=True, parents=True)
 
     global num_videos, problem_factor, mask_folder
     # crop (cropped_height, cropped_width) from (h_start, w_start)
@@ -174,27 +175,29 @@ def preprocess_data(args):
         # original dataset dir
         instrument_folder = data_dir / ('instrument_dataset_' + str(idx))
 
-        # original mask folder
-        ori_mask_folders = list((instrument_folder / 'ground_truth').glob('*'))
-
         # video frames dir (only read left frames)
         frames_dir = instrument_folder / 'left_frames'
 
         # processed dataset dir
-        processed_instrument_folder = cropped_data_dir / ('instrument_dataset_' + str(idx))
+        processed_instrument_folder = target_data_dir / ('instrument_dataset_' + str(idx))
 
         # mkdir for each problem_type
         image_folder = processed_instrument_folder / 'images'
         image_folder.mkdir(exist_ok=True, parents=True)
 
-        binary_mask_folder = processed_instrument_folder / mask_folder['binary']
-        binary_mask_folder.mkdir(exist_ok=True, parents=True)
+        if args.mode == 'train':
+            # original mask folder
+            ori_mask_folders = list((instrument_folder / 'ground_truth').glob('*'))
 
-        parts_mask_folder = processed_instrument_folder / mask_folder['parts']
-        parts_mask_folder.mkdir(exist_ok=True, parents=True)
+            # new mask folder
+            binary_mask_folder = processed_instrument_folder / mask_folder['binary']
+            binary_mask_folder.mkdir(exist_ok=True, parents=True)
 
-        instrument_mask_folder = processed_instrument_folder / mask_folder['instruments']
-        instrument_mask_folder.mkdir(exist_ok=True, parents=True)
+            parts_mask_folder = processed_instrument_folder / mask_folder['parts']
+            parts_mask_folder.mkdir(exist_ok=True, parents=True)
+
+            instrument_mask_folder = processed_instrument_folder / mask_folder['instruments']
+            instrument_mask_folder.mkdir(exist_ok=True, parents=True)
 
         for file_name in tqdm.tqdm(list(frames_dir.glob('*')),
             desc='preprocess dataset %d' % idx, dynamic_ncols=True):
@@ -204,6 +207,10 @@ def preprocess_data(args):
             img = img[h_start: h_start + cropped_height, w_start: w_start + cropped_width]
             # save cropped frame
             cv2.imwrite(str(image_folder / (file_name.name)), img)
+
+            if args.mode == 'test':
+                continue # test data has no masks
+
             # create empty masks
             mask_binary = np.zeros((old_h, old_w))
             mask_parts = np.zeros((old_h, old_w))

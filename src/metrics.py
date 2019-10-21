@@ -2,18 +2,18 @@ import torch
 from torch import nn
 import numpy as np
 import tqdm
-
 import logging
+
 
 def iou_binary_torch(y_true, y_pred):
     """
-    y_true: 4d tensor <b,c=1,h,w>
-    y_pred: 4d tensor <b,c=1,h,w>
+    @param y_true: 3d tensor <b,h,w>
+    @param y_pred: 3d tensor <b,h,w>
 
-    output: 1d tensor <b,c=1>
+    @return output: 1d tensor <b,c=1>
     """
-    assert y_true.dim() == 4 or y_true.dim() == 3
-    assert y_pred.dim() == 4 or y_true.dim() == 3
+    assert y_true.shape == y_pred.shape
+    assert y_true.dim() == 3
 
     epsilon = 1e-15
     # sum for dim (h, w)
@@ -24,13 +24,13 @@ def iou_binary_torch(y_true, y_pred):
 
 def dice_binary_torch(y_true, y_pred):
     """
-    y_true: 4d tensor <b,c=1,h,w>
-    y_pred: 4d tensor <b,c=1,h,w>
+    @param y_true: d tensor <b,h,w>
+    @param y_pred: d tensor <b,h,w>
 
-    output: 1d tensor <b,c=1>
+    @return output: 1d tensor <b,c=1>
     """
-    assert y_true.dim() == 4 or y_true.dim() == 3
-    assert y_pred.dim() == 4 or y_true.dim() == 3
+    assert y_true.shape == y_pred.shape
+    assert y_true.dim() == 3
 
     epsilon = 1e-15
     # sum for dim (h, w)
@@ -115,44 +115,19 @@ def dice_binary_np(y_true, y_pred):
     assert y_pred.ndim == 2
 
     return (2 * (y_true * y_pred).sum() + 1e-15) / (y_true.sum() + y_pred.sum() + 1e-15)
+        
 
-
-# mean metric functions
-def class_mean_metric(class_mmetric_dict):
-    """
-    first calculate mean per class for all data,
-    then calculate mean for all classes
-
-    input: dict of <class, list<mean_metric>>
-    e.g. {
-            1: [mean_iou_cls1(d0), mean_iou_cls1(d2)],
-            2: [mean_iou_cls2(d0)],
-            4: [mean_iou_cls4(d0), mean_iou_cls4(d1), mean_iou_cls4(d2)],
-        }
-
-    output(float): class_mean(data_mean)
-    """
-    assert isinstance(class_mmetric_dict, dict)
-    return np.mean([np.mean(ins_metrics) \
-        for ins_metrics in class_mmetric_dict.values()])
-
-def data_mean_metric(data_mmetric_list):
-    '''
-    first calculate mean per data for all valid classes
-    then calculate mean for all data
-
-    input: list of mean_metric
-    e.g. [mean_iou(d0), mean_iou(d1), mean_iou(d2), ...]
-
-    output(float): data_mean
-    '''
-    assert isinstance(data_mmetric_list, list)
-    return np.mean(data_mmetric_list)
-
-
-####################################################################
-# not used
+'''
+use confusion matrix to calculate iou and dice
+'''
 def calculate_confusion_matrix_from_arrays(prediction, ground_truth, nr_labels):
+    '''
+    @param prediction: 3d ndarray classification results (b, h, w)
+    @param ground_truth: 3d ndarray gts (b, h, w)
+    @param nr_labels: number of classes
+
+    @return confusion matrix
+    '''
     replace_indices = np.vstack((
         ground_truth.flatten(),
         prediction.flatten())
@@ -166,31 +141,96 @@ def calculate_confusion_matrix_from_arrays(prediction, ground_truth, nr_labels):
     return confusion_matrix
 
 
-def get_iou_multi(confusion_matrix):
-    ious = []
-    for index in range(confusion_matrix.shape[0]):
-        true_positives = confusion_matrix[index, index]
-        false_positives = confusion_matrix[:, index].sum() - true_positives
-        false_negatives = confusion_matrix[index, :].sum() - true_positives
-        denom = true_positives + false_positives + false_negatives
-        if denom == 0:
-            iou = 0
-        else:
-            iou = float(true_positives) / denom
-        ious.append(iou)
+def calculate_iou(confusion_matrix):
+    ious = {}
+    # ignore cls 0 (background)
+    for cls in range(1, confusion_matrix.shape[0]):
+        true_positives = confusion_matrix[cls, cls]
+        false_positives = confusion_matrix[:, cls].sum() - true_positives
+        false_negatives = confusion_matrix[cls, :].sum() - true_positives
+
+        # discard the class which are not presented in gt
+        if (true_positives + false_negatives) == 0:
+            continue
+
+        ious[cls] = float(true_positives) / (true_positives + false_positives + false_negatives)
     return ious
 
 
-def get_dice_multi(confusion_matrix):
-    dices = []
-    for index in range(confusion_matrix.shape[0]):
-        true_positives = confusion_matrix[index, index]
-        false_positives = confusion_matrix[:, index].sum() - true_positives
-        false_negatives = confusion_matrix[index, :].sum() - true_positives
-        denom = 2 * true_positives + false_positives + false_negatives
-        if denom == 0:
-            dice = 1
-        else:
-            dice = 2 * float(true_positives) / denom
-        dices.append(dice)
+def calculate_dice(confusion_matrix):
+    dices = {}
+    # ignore cls 0 (background)
+    for cls in range(1, confusion_matrix.shape[0]):
+        true_positives = confusion_matrix[cls, cls]
+        false_positives = confusion_matrix[:, cls].sum() - true_positives
+        false_negatives = confusion_matrix[cls, :].sum() - true_positives
+
+        # discard the class which are not presented in gt
+        if (true_positives + false_negatives) == 0:
+            continue
+
+        dices[cls] = 2 * float(true_positives) / (2 * true_positives + false_positives + false_negatives)
     return dices
+
+
+class MetricRecord():
+    '''
+    docs describing the format of _records
+    '''
+    def __init__(self):
+        super(MetricRecord, self).__init__()
+        self._records = []
+
+    def update_record(self, record):
+        # Note that some record may be empty (no valid (non-background) labels), ignore those samples
+        self._records.append(record)
+
+    def merge(self, mRecord):
+        if not isinstance(mRecord, MetricRecord):
+            raise TypeError('invalid type %s' % type(mRecord))
+        self._records += mRecord._records
+
+
+    def data_mean(self):
+        '''
+        We adopted this evaluation criteria for each metric
+        
+        please refer to the challenge summary
+        Ref: https://arxiv.org/abs/1902.06426
+        Section IV: RESULTS, A. Evaluation Criteria
+
+        1. calculate **arithmatic mean** for all classes that are presented in a frame,
+           if we are considering a set of classes and none are present in a frame,
+           we **discount** the frame from the calculation
+        2. compute this score for each frame and 
+            **average** over all frames to get a per-dataset score
+        '''
+
+        # calculate mean metric for each record
+        data_metrics = [np.mean(list(record.values())) for record in self._records if len(record) > 0]
+        
+        # average over all records
+        return {
+            'items': data_metrics,
+            'mean': np.mean(data_metrics),
+            'std': np.std(data_metrics)
+        }
+
+
+    # # mean metric functions
+    # def class_mean(self):
+    #     '''
+    #     for each class, mean over all samples, then mean over all classes
+    #     '''
+    #     class_metrics = {}
+    #     for record in self._records:
+    #         for ins_id, metric in record.items():
+    #             class_metrics[ins_id] = class_metrics.get(ins_id, []) + [metric] # append the metric
+    #     class_metrics_items = sorted(class_metrics.items(), key=lambda item: item[0])
+    #     class_mmetrics_items = [np.mean(metrics) for ins_id, metrics in class_metrics_items]
+    #     return {
+    #         'items': class_metrics_items,
+    #         'mean': np.mean(class_mmetrics_items),
+    #         'std': np.std(class_mmetrics_items)
+    #     }
+

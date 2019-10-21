@@ -153,14 +153,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='use UnFlow to calculate optical flow for train data')
     parser.add_argument('--pretrained_model_dir', type=str, default='../pretrained_model/network-css.pytorch',
         help='directory of UnFlow pretrained model.')
-    parser.add_argument('--train_dir', type=str, default='../data/cropped_train',
-        help='train data directory.')
     parser.add_argument('--batch_size', type=int, default=8,
         help='batch size for calculating optical flow.')
-    parser.add_argument('--optflow_dir', type=str, default='optflows',
-        help='optical flow file save dir. e.g. .../instrument_dataset_X/optflow_dir/*.flo')
     parser.add_argument('--visualize', type=bool, default=True,
         help='store the visualization of the optical flow')
+    # dirname
+    parser.add_argument('--train_dir', type=str, default='../data/cropped_train',
+        help='train data directory.')
+    parser.add_argument('--optflow_dir', type=str, default='optflows',
+        help='optical flow file save dir. e.g. .../instrument_dataset_X/optflow_dir/*.flo')
     parser.add_argument('--optflow_vis_color_dir', type=str, default='optflows_vis_color',
         help='visualization of optical flow in color model save dir. e.g. .../instrument_dataset_X/optflow_vis_color_dir/*.png')
     parser.add_argument('--optflow_vis_arrow_dir', type=str, default='optflows_vis_arrow',
