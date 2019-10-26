@@ -3,9 +3,6 @@ MF-TAPNet
 
 ----------------------------------------------------
 
-NOTE: This repository is still updating in progress
-------
-
 Useful Links
 ------
 
@@ -117,10 +114,20 @@ Note: This step is tricky because the UnFlow model are pretrained using datasets
 
 ### Train the model
 
-Arguments for model training in ``train.sh`` are in default settings. You may try other models by modifying it.
+Arguments for model training in ``train.sh`` are in default settings. You may try other models from /models/plane_model.py or /models/tap_model.py by modifying the p--model] argument.
 
 ```
 $ sh train.sh
 ```
 
-### Still updating
+After training all the folds, the program will show validation statistics (mean IoU, mean Dice)
+
+
+### Semi-supervised learning
+
+Set arguments for model training in ``train.sh`` with "--semi true". A sample in ``train.sh`` for semi-supervised learning is provided for reference.
+
+
+### Issues
+
+This repository is still updating in progress. We will keep the code updated for any problems encountered.

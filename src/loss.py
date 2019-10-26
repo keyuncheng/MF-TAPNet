@@ -10,6 +10,8 @@ from metrics import (
     dice_multi_np,
     )
 
+from attmap_utils import cal_attmaps_torch
+
 
 # parts of implementation are borrowed from:
 # https://github.com/ternaus/robot-surgery-segmentation/blob/master/loss.py
@@ -36,6 +38,9 @@ class LossMulti:
 
         @return loss: loss
         '''
+
+        # empty input
+
         loss = (1 - self.jaccard_weight) * self.ce_loss(outputs, targets)
         
         jaccard_loss = 0
@@ -70,27 +75,33 @@ class LossMultiSemi(object):
         l_targets = targets[labeled == True]
 
         if self.semi_method == 'ignore':
-            loss = loss_func(l_outputs, l_targets)
+            loss = self.loss_multi(l_outputs, l_targets)
         elif self.semi_method == 'aug_gt':
             # like fully supervised loss
-            loss = loss_func(outputs, targets)
+            loss = self.loss_multi(outputs, targets)
         elif self.semi_method == 'rev_flow':
             ul_outputs = outputs[labeled == False]
             # ul_targets are targets of previous labeled inputs
-            ul_targets = outputs[labeled == False]
+            ul_targets = targets[labeled == False]
             ul_optflows = kwargs['optflow'][labeled == False]
             # inverse outputs
-            inv_outputs = cal_attmaps(ul_outputs, ul_optflows, inverse=True)
-            if self.alpha is None:
+            inv_outputs = cal_attmaps_torch(ul_outputs, ul_optflows, inverse=True)
+            if self.alpha is not None:
+                loss = None
+                if l_targets.shape[0] > 0:
+                    loss = (1 - self.alpha) * self.loss_multi(l_outputs, l_targets)
+                if ul_targets.shape[0] > 0:
+                    un_loss = self.alpha * self.loss_multi(inv_outputs, ul_targets)
+                    if loss is None:
+                        loss = un_loss
+                    else:
+                        loss += un_loss
+            else:
                 '''
                 EXPERIMENT: 
                 attention map will be updated for every data
                 but only do backward pass for supervised data
                 '''
-                loss = loss_func(l_outputs, l_targets) 
-            else:
-                # linear combination of supervised and unsupervised loss
-                loss = (1 - self.alpha) * loss_func(l_outputs, l_targets) 
-                + self.alpha * loss_func(inv_outputs, ul_targets)
+                loss = self.loss_multi(l_outputs, l_targets) 
 
         return loss

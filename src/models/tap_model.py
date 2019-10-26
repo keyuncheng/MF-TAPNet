@@ -121,8 +121,8 @@ class TAPNet(nn.Module):
         self.up1 = UNetModule(64 + 32, 32)
 
         self.att4 = AttentionModule(512 + 256, 512 + 256, 1/8, bn=bn)
-        self.att3 = AttentionModule(256 + 128, 256 + 128, 1/4, bn=bn)
-        self.att2 = AttentionModule(128 + 64, 128 + 64, 1/2, bn=bn)
+        self.att3 = AttentionModule(256 + 128, 256 + 128, 1, bn=bn)
+        self.att2 = AttentionModule(128 + 64, 128 + 64, 1, bn=bn)
         self.att1 = AttentionModule(64 + 32, 64 + 32, 1, bn=bn)
 
         # return logits
@@ -136,14 +136,14 @@ class TAPNet(nn.Module):
         conv4 = self.conv4(self.maxpool(conv3)) # 256
         center = self.center(self.maxpool(conv4)) # 512
         
-        att4 = self.att4(torch.cat([conv4, self.upsample(center)], 1), attmap)
+        att4, attmap4 = self.att4(torch.cat([conv4, self.upsample(center)], 1), attmap)
         up4 = self.up4(att4)
         # up4 = self.up4(torch.cat([conv4, self.upsample(center)], 1))
-        att3 = self.att3(torch.cat([conv3, self.upsample(up4)], 1), attmap)
+        att3, attmap3 = self.att3(torch.cat([conv3, self.upsample(up4)], 1), self.upsample(attmap4))
         up3 = self.up3(att3)
-        att2 = self.att2(torch.cat([conv2, self.upsample(up3)], 1), attmap)
+        att2, attmap2 = self.att2(torch.cat([conv2, self.upsample(up3)], 1), self.upsample(attmap3))
         up2 = self.up2(att2)
-        att1 = self.att1(torch.cat([conv1, self.upsample(up2)], 1), attmap)
+        att1, attmap1 = self.att1(torch.cat([conv1, self.upsample(up2)], 1), self.upsample(attmap2))
         up1 = self.up1(att1)
 
         output = self.final(up1)
@@ -231,20 +231,21 @@ class TAPNet16(nn.Module):
         self.conv3 = self.vgg16[10:16]
         self.conv4 = self.vgg16[17:23]
         self.conv5 = self.vgg16[24:30]
+        self.upsample = Interpolate(scale_factor=2,\
+             mode='bilinear', align_corners=False)
 
         self.center = DecoderModule(512, 512, 256, upsample=upsample)
-        self.dec5 = DecoderModule(512, 512, 256, upsample=upsample)
-        self.dec4 = DecoderModule(512, 512, 256, upsample=upsample)
-        self.dec3 = DecoderModule(256, 256, 64, upsample=upsample)
-        self.dec2 = DecoderModule(128, 128, 32, upsample=upsample)
-        self.dec1 = Conv2dReLU(64, 32)
+        self.dec5 = DecoderModule(256 + 512, 512, 256, upsample=upsample)
+        self.dec4 = DecoderModule(256 + 512, 512, 256, upsample=upsample)
+        self.dec3 = DecoderModule(128 + 256, 256, 64, upsample=upsample)
+        self.dec2 = DecoderModule(64 + 128, 128, 32, upsample=upsample)
+        self.dec1 = Conv2dReLU(32 + 64, 32)
 
-
-        self.att5 = AttentionModule(256 + 512, 512, 1/16, bn=bn)
-        self.att4 = AttentionModule(256 + 512, 512, 1/8, bn=bn)
-        self.att3 = AttentionModule(256 + 256, 256, 1/4, bn=bn)
-        self.att2 = AttentionModule(64 + 128, 128, 1/2, bn=bn)
-        self.att1 = AttentionModule(32 + 64, 64, 1, bn=bn)
+        self.att5 = AttentionModule(256 + 512, 256 + 512, 1/16, bn=bn)
+        self.att4 = AttentionModule(256 + 512, 256 + 512, 1, bn=bn)
+        self.att3 = AttentionModule(256 + 256, 128 + 256, 1, bn=bn)
+        self.att2 = AttentionModule(64 + 128, 64 + 128, 1, bn=bn)
+        self.att1 = AttentionModule(32 + 64, 32 + 64, 1, bn=bn)
 
         # return logits
         self.final = nn.Conv2d(32, num_classes, 1)
@@ -260,15 +261,15 @@ class TAPNet16(nn.Module):
 
         center = self.center(self.maxpool(conv5)) # 256
 
-        att5 = self.att5(torch.cat([center, conv5], 1), attmap)
+        att5, attmap5 = self.att5(torch.cat([center, conv5], 1), attmap)
         dec5 = self.dec5(att5)
-        att4 = self.att4(torch.cat([dec5, conv4], 1), attmap)
+        att4, attmap4 = self.att4(torch.cat([dec5, conv4], 1), self.upsample(attmap5))
         dec4 = self.dec4(att4)
-        att3 = self.att3(torch.cat([dec4, conv3], 1), attmap)
+        att3, attmap3 = self.att3(torch.cat([dec4, conv3], 1), self.upsample(attmap4))
         dec3 = self.dec3(att3)
-        att2 = self.att2(torch.cat([dec3, conv2], 1), attmap)
+        att2, attmap2 = self.att2(torch.cat([dec3, conv2], 1), self.upsample(attmap3))
         dec2 = self.dec2(att2)
-        att1 = self.att1(torch.cat([dec2, conv1], 1), attmap)
+        att1, attmap1 = self.att1(torch.cat([dec2, conv1], 1), self.upsample(attmap2))
         dec1 = self.dec1(att1)
 
         output = self.final(dec1)
@@ -279,6 +280,8 @@ class TAPNet34_sum(nn.Module):
     def __init__(self, in_channels, num_classes, pretrained=True, bn=False):
         super(TAPNet34_sum, self).__init__()
         encoder = models.resnet34(pretrained=pretrained)
+        self.upsample = Interpolate(scale_factor=2,\
+             mode='bilinear', align_corners=False)
 
         self.firstconv = nn.Sequential(
             encoder.conv1,
@@ -298,9 +301,9 @@ class TAPNet34_sum(nn.Module):
         self.decoder1 = DecoderBlockLinkNet(64, 32)
 
         self.att4 = AttentionModule(256, 256, 1/16, bn=bn)
-        self.att3 = AttentionModule(128, 128, 1/8, bn=bn)
-        self.att2 = AttentionModule(64, 64, 1/4, bn=bn)
-        self.att1 = AttentionModule(32, 32, 1/2, bn=bn)
+        self.att3 = AttentionModule(128, 128, 1, bn=bn)
+        self.att2 = AttentionModule(64, 64, 1, bn=bn)
+        self.att1 = AttentionModule(32, 32, 1, bn=bn)
 
         # Final Classifier
         self.finalconv = nn.Sequential(
@@ -322,10 +325,14 @@ class TAPNet34_sum(nn.Module):
         e4 = self.encoder4(e3) # 512
 
         # Decoder with Skip Connections
-        att4 = self.att4(self.decoder4(e4) + e3, attmap)
-        att3 = self.att3(self.decoder3(att4) + e2, attmap)
-        att2 = self.att2(self.decoder2(att3) + e1, attmap)
-        att1 = self.att1(self.decoder1(att2), attmap)
+        dec4 = self.decoder4(e4) + e3
+        att4, attmap4 = self.att4(dec4, attmap)
+        dec3 = self.decoder3(att4) + e2
+        att3, attmap3 = self.att3(dec3, self.upsample(attmap4))
+        dec2 = self.decoder2(att3) + e1
+        att2, attmap2 = self.att2(dec2, self.upsample(attmap3))
+        dec1 = self.decoder1(att2)
+        att1, attmap1 = self.att1(dec1, self.upsample(attmap2))
 
         # Final Classification
         finalconv = self.finalconv(att1)
@@ -347,6 +354,8 @@ class TAPNet34(nn.Module):
         self.conv2 = self.encoder.layer2
         self.conv3 = self.encoder.layer3
         self.conv4 = self.encoder.layer4
+        self.upsample = Interpolate(scale_factor=2,\
+             mode='bilinear', align_corners=False)
 
         self.dec4 = DecoderBlockLinkNet(512, 256)
         self.dec3 = DecoderBlockLinkNet(256, 128)
@@ -354,13 +363,13 @@ class TAPNet34(nn.Module):
         self.dec1 = DecoderBlockLinkNet(64, 32)
 
         self.att4 = AttentionModule(256 + 256, 256, 1/16, bn=bn)
-        self.att3 = AttentionModule(128 + 128, 128, 1/8, bn=bn)
-        self.att2 = AttentionModule(64 + 64, 64, 1/4, bn=bn)
-        self.att1 = AttentionModule(32, 32, 1/2, bn=bn)
+        self.att3 = AttentionModule(128 + 128, 128, 1, bn=bn)
+        self.att2 = AttentionModule(64 + 64, 64, 1, bn=bn)
+        self.att1 = AttentionModule(32, 32, 1, bn=bn)
 
         # Final Classifier
         self.finalconv = nn.Sequential(
-            nn.ConvTranspose2d(32, 32, 3, stride=2), # downsample
+            nn.ConvTranspose2d(32, 32, 4, stride=2), # downsample
             nn.ReLU(inplace=True),
             nn.Conv2d(32, 32, 3),
             nn.ReLU(inplace=True)
@@ -377,16 +386,15 @@ class TAPNet34(nn.Module):
         conv3 = self.conv3(conv2) # 256
         conv4 = self.conv4(conv3) # 512
 
-        dec4 = self.dec4(conv4) # 256
-        att4 = self.att4(torch.cat([dec4, conv3], 1), attmap) # 256 + 256
-        dec3 = self.dec3(att4) # 128
-        att3 = self.att3(torch.cat([dec3, conv2], 1), attmap) # 128 + 128
-        dec2 = self.dec2(att3) # 64
-        att2 = self.att2(torch.cat([dec2, conv1], 1), attmap) # 64 + 64
-        dec1 = self.dec1(att2) # 32
-        att1 = self.att1(dec1, attmap) # 64 + 64
+        dec4 = self.dec4(conv4)
+        att4, attmap4 = self.att4(torch.cat([dec4, conv3], 1), attmap)
+        dec3 = self.dec3(att4)
+        att3, attmap3 = self.att3(torch.cat([dec3, conv2], 1), self.upsample(attmap4))
+        dec2 = self.dec2(att3)
+        att2, attmap2 = self.att2(torch.cat([dec2, conv1], 1), self.upsample(attmap3))
+        dec1 = self.dec1(att2)
 
-        finalconv = self.finalconv(att1)
+        finalconv = self.finalconv(dec1)
         output = self.final(finalconv)
 
         return output

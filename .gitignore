@@ -1,0 +1,8 @@
+bak_mod/
+data/
+model_ckpt/
+pretrained_model/
+*.pyc
+**/__pycache__
+log.txt
+misc.md

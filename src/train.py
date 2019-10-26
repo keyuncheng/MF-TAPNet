@@ -262,7 +262,7 @@ def train_fold(fold, args):
             # output_classes and target_classes: <b, h, w>
             output_softmax_np = torch.softmax(outputs, dim=1).detach().cpu().numpy()
             # update attention maps
-            train_loader.dataset.update_attmaps(output_softmax_np, batch['idx'].numpy())
+            train_loader.dataset.update_attmaps(output_softmax_np, batch['abs_idx'].numpy())
             return_dict['attmap'] = add_params['attmap']
 
         return return_dict
@@ -328,7 +328,7 @@ def train_fold(fold, args):
 
     # monitor train loss over epoch
     if args.semi:
-        train_loss = imetrics.Loss(loss_func_semi, output_transform=lambda x: (x['output'], x['target'], x['kwargs']))
+        train_loss = imetrics.Loss(loss_func_semi, output_transform=lambda x: (x['output'], x['target'], x['loss_kwargs']))
     else:
         train_loss = imetrics.Loss(loss_func, output_transform=lambda x: (x['output'], x['target']))
     train_loss.attach(trainer, 'train_loss')
@@ -417,7 +417,7 @@ def train_fold(fold, args):
 
             if 'TAPNet' in args.model:
                 # for TAPNet, update attention maps after each iteration
-                valid_loader.dataset.update_attmaps(output_softmaxs.cpu().numpy(), batch['idx'].numpy())
+                valid_loader.dataset.update_attmaps(output_softmaxs.cpu().numpy(), batch['abs_idx'].numpy())
                 # for TAPNet, return extra internal values
                 return_dict['attmap'] = add_params['attmap']
                 # TODO: for TAPNet, return internal self-learned attention maps
@@ -558,7 +558,7 @@ def train_fold(fold, args):
             # log attention maps and other internal values
             inter_vals_grid = tvutils.make_grid(torch.cat([
                 output['attmap'],
-            ]), padding=2, normalize=True, nrows=batch_size).cpu()
+            ]), padding=2, normalize=True, nrow=batch_size).cpu()
             logger.writer.add_image(tag='%s internal vals' % (log_tag), img_tensor=inter_vals_grid)
 
     def tb_log_valid_epoch_vars(engine, logger, event_name):

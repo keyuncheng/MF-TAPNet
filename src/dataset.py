@@ -5,10 +5,9 @@ import cv2
 from albumentations.pytorch.functional import img_to_tensor
 from albumentations import Resize
 import random
-from scipy import ndimage
-
 # modules
 import ds_utils.robseg_2017 as utils
+from attmap_utils import init_attmaps_np, cal_attmap_np
 
 
 class RobotSegDataset(Dataset):
@@ -25,11 +24,12 @@ class RobotSegDataset(Dataset):
         self.model = model
         self.semi = semi
 
-        # for TAPNet, change dataset schedule
+        # for TAPNet, change dataset schedule for training
         if 'TAPNet' in self.model:
-            self.batch_size = batch_size
-            # init dataset schedule to be ordered
-            self.set_dataset_schedule('ordered')
+            if self.mode == 'train':
+                self.batch_size = kwargs['batch_size']
+                # init dataset schedule to be ordered
+                self.set_dataset_schedule('ordered')
             # init attention maps
             self.init_attmaps()
 
@@ -104,7 +104,7 @@ class RobotSegDataset(Dataset):
             # generate attention map
             if abs_idx % utils.num_frames_video:
                 # calculate attention map using previous prediction
-                attmap = self.cal_attmap(self.attmaps[abs_idx - 1], optflow)
+                attmap = cal_attmap_np(self.attmaps[abs_idx - 1], optflow)
 
                 '''
                 EXPERIMENT: uncomment to use
@@ -141,7 +141,7 @@ class RobotSegDataset(Dataset):
                         # give last frame prediction (only for 50% semi-supervised problem)
                         # it's guaranteed that every unlabeled file has a previous labeled file
                         prev_filename = self.filenames[abs_idx - 1]
-                        mask = self.load_mask(prev_filename)
+                        mask = self.load_mask(prev_filename, self.mask_folder)
 
                     # input optical flow for reverse gt calculation
                     input_dict['optflow'] = torch.from_numpy(optflow.transpose(2,0,1)).float()
@@ -208,7 +208,7 @@ class RobotSegDataset(Dataset):
         '''
         filename = self.filenames[idx]
         abs_idx = idx
-        if 'TAPNet' in self.model:
+        if 'TAPNet' in self.model and self.mode == 'train':
             if self.schedule == "shuffle":
                 filename = self.shuffled_filenames[idx]
                 abs_idx = self.shuffled_idx[idx]
@@ -227,41 +227,14 @@ class RobotSegDataset(Dataset):
         abs_idxs: absolute ndarray indices in original dataset order
         '''
 
-        assert output.ndim == 4
+        assert outputs.ndim == 4
         assert abs_idxs.ndim == 1
-        assert output.shape[0] == abs_idxs.shape[0]
+        assert outputs.shape[0] == abs_idxs.shape[0]
 
         # update attention map using prediction for current frame
         b, c, h, w = outputs.shape
         # probability of being non-background
         self.attmaps[abs_idxs] = 1 - outputs[:,0,:,:]
-
-    def cal_attmap(self, attmap_prev, optflow):
-        '''
-        input:
-        attmap_prev: attention map of previous frame (stored in history)
-        optflow: optical flow <prev_frame, cur_frame>
-        
-        return:
-        attmap: attention map for current frame
-        '''
-        h, w = optflow.shape[:2]
-
-        x, y = np.meshgrid(np.arange(w), np.arange(h))
-        new_x = np.rint(x + optflow[:,:,0]).astype(dtype=np.int64)
-        new_y = np.rint(y + optflow[:,:,1]).astype(dtype=np.int64)
-        # get valid x and valid y
-        new_x = np.clip(new_x, 0, w - 1)
-        new_y = np.clip(new_y, 0, h - 1)
-
-        attmap = np.zeros((h, w))
-        attmap[new_y.flatten(), new_x.flatten()] = attmap_prev[y.flatten(), x.flatten()]
-        
-        # use the dilate operation to make attention area larger
-        attmap = ndimage.grey_dilation(attmap, size=(10, 10))
-
-        return attmap
-
 
     def load_image(self, filename):
         return cv2.cvtColor(cv2.imread(str(filename)), cv2.COLOR_BGR2RGB)
@@ -339,5 +312,5 @@ class RobotSegDataset(Dataset):
                 break
 
         # init with zero attention
-        self.attmaps = np.zeros((num_imgs, h, w))
+        self.attmaps = init_attmaps_np(num_imgs, h, w)
         # self.attmaps = np.random.randn(num_imgs, h, w)
