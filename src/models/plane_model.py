@@ -134,7 +134,7 @@ class DecoderModule(nn.Module):
 
     def forward(self, x):
         return self.l(x)
-        
+
 
 class UNet11(nn.Module):
     """

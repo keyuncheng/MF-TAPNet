@@ -208,12 +208,19 @@ class MetricRecord():
 
         # calculate mean metric for each record
         data_metrics = [np.mean(list(record.values())) for record in self._records if len(record) > 0]
+
+        if len(data_metrics) == 0:
+            data_mean = 0
+            data_std = 0
+        else:
+            data_mean = np.mean(data_metrics)
+            data_std = np.std(data_metrics)
         
         # average over all records
         return {
             'items': data_metrics,
-            'mean': np.mean(data_metrics),
-            'std': np.std(data_metrics)
+            'mean': data_mean,
+            'std': data_std
         }
 
 

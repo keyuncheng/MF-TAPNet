@@ -26,6 +26,7 @@ class RobotSegDataset(Dataset):
 
         # for TAPNet, change dataset schedule for training
         if 'TAPNet' in self.model:
+            self.mf = kwargs['mf']
             if self.mode == 'train':
                 self.batch_size = kwargs['batch_size']
                 # init dataset schedule to be ordered
@@ -103,8 +104,12 @@ class RobotSegDataset(Dataset):
             optflow = self.load_optflow(filename)
             # generate attention map
             if abs_idx % utils.num_frames_video:
-                # calculate attention map using previous prediction
-                attmap = cal_attmap_np(self.attmaps[abs_idx - 1], optflow)
+                if self.mf:
+                    # calculate attention map using previous prediction and Motion Flow
+                    attmap = cal_attmap_np(self.attmaps[abs_idx - 1], optflow)
+                else:
+                    # calculate attention map using previous prediction
+                    attmap = self.attmaps[abs_idx - 1]
 
                 '''
                 EXPERIMENT: uncomment to use
@@ -112,10 +117,10 @@ class RobotSegDataset(Dataset):
                 '''
                 # attmap = self.attmaps[abs_idx - 1]
             else:
-                # first frame of every video, simply use prediction in last epoch
+                # first frame of every video, simply use prediction in last epoch without motion flow
                 attmap = self.attmaps[abs_idx]
 
-            # input absolute index and attention map for updating
+            # input absolute index and attention map for attention map update
             input_dict['abs_idx'] = abs_idx
             input_dict['attmap'] = torch.from_numpy(np.expand_dims(attmap, 0)).float()
 
@@ -204,8 +209,8 @@ class RobotSegDataset(Dataset):
         output:
         filename: correct filename in specific order
         abs_idx: absolute index in original dataset order
-
         '''
+
         filename = self.filenames[idx]
         abs_idx = idx
         if 'TAPNet' in self.model and self.mode == 'train':
@@ -264,7 +269,7 @@ class RobotSegDataset(Dataset):
 
         return optflow
 
-    # dataset schedule in 
+    # dataset schedule [ordered, shuffle]
     def set_dataset_schedule(self, schedule):
         self.schedule = schedule
         if self.schedule == "shuffle":
@@ -275,7 +280,6 @@ class RobotSegDataset(Dataset):
         else:
             raise NotImplementedError
 
-    # self defined dataset shuffle
     # random shuffle the index of filenames
     def shuffle_dataset(self):
         self.shuffled_idx = np.arange(0, len(self.filenames))

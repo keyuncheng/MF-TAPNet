@@ -181,10 +181,7 @@ def train_fold(fold, args):
         # for TAPNet, cancel default shuffle, use self-defined shuffle in torch.Dataset instead
         train_shuffle = False
         train_ds_kwargs['batch_size'] = args.batch_size
-        # in validation, num_workers should be set to 0 for sequences
-        valid_num_workers = 0
-        # in validation, batch_size should be set to 1 for sequences
-        valid_batch_size = 1
+        train_ds_kwargs['mf'] = args.mf
     if args.semi == True:
         train_ds_kwargs['semi_method'] = args.semi_method
         train_ds_kwargs['semi_percentage'] = args.semi_percentage
@@ -197,6 +194,13 @@ def train_fold(fold, args):
         'model': args.model,
         'mode': 'valid',
     }
+
+    if 'TAPNet' in args.model:
+        # in validation, num_workers should be set to 0 for sequences
+        valid_num_workers = 0
+        # in validation, batch_size should be set to 1 for sequences
+        valid_batch_size = 1
+        valid_ds_kwargs['mf'] = args.mf
 
     # train dataloader
     train_loader = DataLoader(
@@ -521,7 +525,7 @@ def train_fold(fold, args):
             (mean_dices, std_dices, dices))
 
 
-        ### 2. mean metrics for all data calculated by definision ###
+        ### 2. mean metrics for all data calculated by definition ###
         iou_data_mean = epoch_metrics['iou'].data_mean()
         dice_data_mean = epoch_metrics['dice'].data_mean()
 
@@ -531,13 +535,13 @@ def train_fold(fold, args):
             (len(dice_data_mean['items']), dice_data_mean['mean'], dice_data_mean['std']))
 
         # record metrics in trainer every epoch
-        trainer.state.metrics_records[trainer.state.epoch] = \
-            {'miou': mean_ious, 'std_miou': std_ious,
-            'mdice': mean_dices, 'std_mdice': std_dices}
-        
         # trainer.state.metrics_records[trainer.state.epoch] = \
-        #     {'miou': iou_data_mean['mean'], 'std_miou': iou_data_mean['std'],
-        #     'mdice': dice_data_mean['mean'], 'std_mdice': dice_data_mean['std']}
+        #     {'miou': mean_ious, 'std_miou': std_ious,
+        #     'mdice': mean_dices, 'std_mdice': std_dices}
+        
+        trainer.state.metrics_records[trainer.state.epoch] = \
+            {'miou': iou_data_mean['mean'], 'std_miou': iou_data_mean['std'],
+            'mdice': dice_data_mean['mean'], 'std_mdice': dice_data_mean['std']}
 
 
     # log interal variables(attention maps, outputs, etc.) on validation
@@ -687,6 +691,9 @@ if __name__ == '__main__':
     # hyper-params
     parser.add_argument('--model', type=str, default='UNet',
         help='model for segmentation.')
+
+    parser.add_argument('--mf', type=bool, default=True,
+        help='whether to enable Motion Flow for attention map generation. This option is only valid for TAPNet based models. Enable this option to use MF-TAPNet')
 
     parser.add_argument('--max_epochs', type=int, default=20,
         help='max epochs for training.')

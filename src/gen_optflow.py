@@ -96,6 +96,7 @@ def main(args):
 
     # images
     filenames = utils.get_data(data_dir=args.train_dir, data_type="images")
+    # filenames = list(Path(args.train_dir).glob('*'))
     batch_size = args.batch_size
     # dataloader
     loader = DataLoader(
@@ -143,7 +144,7 @@ def main(args):
                 optflow_vis_arrow_dir.mkdir(exist_ok=True, parents=True)
                 flow_arrow = flow_vis_arr.flow_to_arrow(flow_uv)
                 cv2.imwrite(str(optflow_vis_arrow_dir / (filename.name)), flow_arrow)
-
+                
         tq.update(batch_size)
 
     tq.close()

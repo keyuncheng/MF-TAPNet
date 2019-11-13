@@ -9,12 +9,14 @@ def init_attmaps_np(num_data, h, w):
 
 def cal_attmap_np(attmap_prev, optflow):
     '''
+    Calculate Motion Flow based attention map
+
     input:
     attmap_prev: attention map of previous frame (stored in history)
     optflow: optical flow <prev_frame, cur_frame>
     
     return:
-    attmap: attention map for current frame
+    attmap: Motion Flow based attention map for current frame
     '''
     h, w = optflow.shape[:2]
 

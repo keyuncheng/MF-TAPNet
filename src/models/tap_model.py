@@ -30,74 +30,7 @@ class AttentionModule(nn.Module):
         output = x + (x * attmap)
         attmap_learned = self.learnable_attmap(output)
         return output, attmap_learned
-        # attentionMask = self.attentionMask(x * attmap)
-        
-        # output = self.finalconv(x + attentionMask)
-        # return output
 
-
-class AttentionModulev5(nn.Module):
-    """docstring for AttentionModulev4"""
-    def __init__(self, in_channels, out_channels, scale_factor, bn=False):
-        super(AttentionModulev5, self).__init__()
-        self.scale_factor = scale_factor
-        self.downsample = Interpolate(scale_factor=scale_factor,\
-             mode='bilinear', align_corners=False)
-
-        self.firstconv = Conv2dReLU(in_channels, out_channels, bn=bn)
-        
-        # Softmax version:
-        # self.attentionMask = nn.Sequential(
-        #     Conv2dReLU(out_channels, out_channels, kernel=1, padding=0, bn=bn),
-        #     nn.Softmax(dim=1)
-        # )
-        # self.finalattmap = nn.Sigmoid{
-        #     nn.Conv2d(in_channels, 1, 1)
-        #     nn.Sigmoid()
-        # }
-
-        # Sigmoid version:
-        # self.attentionMask = nn.Sequential(
-        #     nn.Conv2d(in_channels, 1, 1),
-        #     nn.Sigmoid()
-        # )
-
-        # self.finalconv = Conv2dReLU(out_channels, out_channels, kernel=1, padding=0, bn=bn)
-    
-    def forward(self, x, attmap, **kwargs):
-        if self.scale_factor != 1:
-            attmap = self.downsample(attmap)
-        x = self.firstconv(x)
-        return x + (x * attmap)
-        # attentionMask = self.attentionMask(x * attmap)
-        
-        # output = self.finalconv(x + attentionMask)
-        # return output
-
-
-
-class AttentionModulev4(nn.Module):
-    """docstring for AttentionModulev5"""
-    def __init__(self, in_channels, scale_factor, bn=False):
-        super(AttentionModulev4, self).__init__()
-        self.scale_factor = scale_factor
-        self.downsample = Interpolate(scale_factor=scale_factor,\
-             mode='bilinear', align_corners=False)
-        self.conv1 = Conv2dReLU(in_channels, in_channels, kernel=1, padding=0, bn=bn)
-        self.attentionMask = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, 1),
-            nn.Softmax(dim=1)
-        )
-        self.conv2 = Conv2dReLU(in_channels, in_channels, kernel=1, padding=0, bn=bn)
-    
-    def forward(self, x, attmap, **kwargs):
-        if self.scale_factor != 1:
-            attmap = self.downsample(attmap)
-        conv1 = self.conv1(x)
-        attentionMask = self.attentionMask(conv1 * attmap)
-        output = self.conv2(conv1 * attentionMask)
-
-        return output
 
 
 class TAPNet(nn.Module):
@@ -174,13 +107,6 @@ class TAPNet11(nn.Module):
         self.dec3 = DecoderModule(128 + 256, 256, 64, upsample=upsample)
         self.dec2 = DecoderModule(64 + 128, 128, 32, upsample=upsample)
         self.dec1 = Conv2dReLU(32 + 64, 32)
-
-
-        # self.att5 = AttentionModule(256 + 512, 256 + 512, 1/16, bn=bn)
-        # self.att4 = AttentionModule(256 + 512, 256 + 512, 1/8, bn=bn)
-        # self.att3 = AttentionModule(128 + 256, 128 + 256, 1/4, bn=bn)
-        # self.att2 = AttentionModule(64 + 128, 64 + 128, 1/2, bn=bn)
-        # self.att1 = AttentionModule(32 + 64, 32 + 64, 1, bn=bn)
 
         self.att5 = AttentionModule(256 + 512, 256 + 512, 1/16, bn=bn)
         self.att4 = AttentionModule(256 + 512, 256 + 512, 1, bn=bn)

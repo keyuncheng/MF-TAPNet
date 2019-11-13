@@ -19,7 +19,7 @@ As required, you need to register an account and get the permission to download 
 Instructions
 ------
 
-To train and evaluate the TF-MAPNet model, you may follow the instructions.
+To train and evaluate the MF-TAPNet model, you may follow the instructions.
 
 
 ### Dependencies
